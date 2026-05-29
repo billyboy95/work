@@ -32,3 +32,5 @@ Full-stack autonomous agent orchestration platform with a Node.js/Express backen
 - The frontend calls `http://localhost:4000` by default (configured via `NEXT_PUBLIC_API_URL` in `frontend/.env.local`). The backend must be running for the dashboard to show agent/task data.
 - Backend `.env` is created from `.env.example` — copy it if missing: `cp backend/.env.example backend/.env`.
 - The frontend was scaffolded with Next.js 16 which has breaking changes from earlier versions. See `frontend/AGENTS.md` for framework-specific notes.
+- Backend tests (`npm test`) run entirely in-memory via Supertest — no database or external services required.
+- The frontend does not have a `.env.local` file by default; it uses `http://localhost:4000` as the API base URL via the hardcoded default in `src/app/page.tsx`.
