@@ -28,6 +28,9 @@ Autonomous agent orchestration and management platform. Build, deploy, and manag
 git clone <repo>
 cd zentrix-agent-platform
 
+# Start PostgreSQL for durable agent/task storage
+docker compose up postgres -d
+
 # Backend
 cd backend
 npm install
@@ -48,7 +51,14 @@ npm run dev
 zentrix-agent-platform/
 ├── backend/              # Node.js API server
 ├── frontend/             # Next.js dashboard
-├── docker-compose.yml    # Local development
-├── .github/workflows/    # CI/CD pipelines
-└── docs/                 # Documentation
+├── docker-compose.yml    # Local development services
+├── AGENTS.md             # Cloud agent instructions
+├── README.md             # Project overview
+└── LICENSE
 ```
+
+## Storage Model
+
+- Agents and tasks are stored in PostgreSQL and survive backend restarts.
+- The backend initializes its core tables automatically on startup.
+- Redis remains available in `docker-compose.yml` for future queue and worker work, but it is not required for the current CRUD APIs.

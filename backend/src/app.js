@@ -4,23 +4,29 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const errorHandler = require("./middleware/errorHandler");
 const healthRoutes = require("./routes/health");
-const agentRoutes = require("./routes/agents");
-const taskRoutes = require("./routes/tasks");
+const createAgentRoutes = require("./routes/agents");
+const createTaskRoutes = require("./routes/tasks");
 
-const app = express();
+function createApp({ agentRepository, taskRepository }) {
+  const app = express();
 
-app.use(helmet());
-app.use(cors());
-app.use(express.json());
+  app.use(helmet());
+  app.use(cors());
+  app.use(express.json());
 
-if (process.env.NODE_ENV !== "test") {
-  app.use(morgan("dev"));
+  if (process.env.NODE_ENV !== "test") {
+    app.use(morgan("dev"));
+  }
+
+  app.use("/api/health", healthRoutes);
+  app.use("/api/agents", createAgentRoutes({ agentRepository }));
+  app.use("/api/tasks", createTaskRoutes({ taskRepository }));
+
+  app.use(errorHandler);
+
+  return app;
 }
 
-app.use("/api/health", healthRoutes);
-app.use("/api/agents", agentRoutes);
-app.use("/api/tasks", taskRoutes);
-
-app.use(errorHandler);
-
-module.exports = app;
+module.exports = {
+  createApp,
+};

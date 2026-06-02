@@ -1,50 +1,75 @@
 const { Router } = require("express");
 const { v4: uuidv4 } = require("uuid");
 
-const router = Router();
+function createTaskRoutes({ taskRepository }) {
+  const router = Router();
 
-const tasks = new Map();
+  router.get("/", async (_req, res, next) => {
+    try {
+      const tasks = await taskRepository.list();
+      res.json({ tasks });
+    } catch (error) {
+      next(error);
+    }
+  });
 
-router.get("/", (_req, res) => {
-  res.json({ tasks: Array.from(tasks.values()) });
-});
+  router.get("/:id", async (req, res, next) => {
+    try {
+      const task = await taskRepository.getById(req.params.id);
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
 
-router.get("/:id", (req, res) => {
-  const task = tasks.get(req.params.id);
-  if (!task) return res.status(404).json({ error: "Task not found" });
-  res.json(task);
-});
+      res.json(task);
+    } catch (error) {
+      next(error);
+    }
+  });
 
-router.post("/", (req, res) => {
-  const { title, description, agentId } = req.body;
-  if (!title) return res.status(400).json({ error: "title is required" });
+  router.post("/", async (req, res, next) => {
+    try {
+      const { title, description, agentId } = req.body;
+      if (!title) {
+        return res.status(400).json({ error: "title is required" });
+      }
 
-  const task = {
-    id: uuidv4(),
-    title,
-    description: description || "",
-    agentId: agentId || null,
-    status: "pending",
-    result: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
+      const timestamp = new Date().toISOString();
+      const task = await taskRepository.create({
+        id: uuidv4(),
+        title,
+        description: description || "",
+        agentId: agentId || null,
+        status: "pending",
+        result: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
 
-  tasks.set(task.id, task);
-  res.status(201).json(task);
-});
+      res.status(201).json(task);
+    } catch (error) {
+      next(error);
+    }
+  });
 
-router.put("/:id/status", (req, res) => {
-  const task = tasks.get(req.params.id);
-  if (!task) return res.status(404).json({ error: "Task not found" });
+  router.put("/:id/status", async (req, res, next) => {
+    try {
+      const { status, result } = req.body;
+      const task = await taskRepository.updateStatus(req.params.id, {
+        ...(status !== undefined ? { status } : {}),
+        ...(Object.prototype.hasOwnProperty.call(req.body, "result") ? { result } : {}),
+      });
 
-  const { status, result } = req.body;
-  if (status) task.status = status;
-  if (result !== undefined) task.result = result;
-  task.updatedAt = new Date().toISOString();
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
 
-  tasks.set(task.id, task);
-  res.json(task);
-});
+      res.json(task);
+    } catch (error) {
+      next(error);
+    }
+  });
 
-module.exports = router;
+  return router;
+}
+
+module.exports = createTaskRoutes;
