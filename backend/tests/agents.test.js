@@ -1,8 +1,25 @@
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 const request = require("supertest");
-const app = require("../src/app");
 
 describe("Agents API", () => {
+  let app;
   let agentId;
+  let dataDir;
+
+  beforeAll(() => {
+    dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "zentrix-agents-"));
+    process.env.DATA_DIR = dataDir;
+    jest.resetModules();
+    app = require("../src/app");
+  });
+
+  afterAll(() => {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+    delete process.env.DATA_DIR;
+    jest.resetModules();
+  });
 
   it("GET /api/agents returns empty list", async () => {
     const res = await request(app).get("/api/agents");

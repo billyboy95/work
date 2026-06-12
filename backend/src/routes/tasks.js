@@ -1,16 +1,15 @@
 const { Router } = require("express");
 const { v4: uuidv4 } = require("uuid");
+const tasksStore = require("../stores/tasksStore");
 
 const router = Router();
 
-const tasks = new Map();
-
 router.get("/", (_req, res) => {
-  res.json({ tasks: Array.from(tasks.values()) });
+  res.json({ tasks: tasksStore.getAll() });
 });
 
 router.get("/:id", (req, res) => {
-  const task = tasks.get(req.params.id);
+  const task = tasksStore.get(req.params.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
   res.json(task);
 });
@@ -30,12 +29,12 @@ router.post("/", (req, res) => {
     updatedAt: new Date().toISOString(),
   };
 
-  tasks.set(task.id, task);
+  tasksStore.set(task);
   res.status(201).json(task);
 });
 
 router.put("/:id/status", (req, res) => {
-  const task = tasks.get(req.params.id);
+  const task = tasksStore.get(req.params.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
 
   const { status, result } = req.body;
@@ -43,7 +42,7 @@ router.put("/:id/status", (req, res) => {
   if (result !== undefined) task.result = result;
   task.updatedAt = new Date().toISOString();
 
-  tasks.set(task.id, task);
+  tasksStore.set(task);
   res.json(task);
 });
 
