@@ -1,8 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a0a0a;
+  --foreground: #e4e4e7;
+  --accent: #dc2626;
+  --accent-hover: #ef4444;
+  --surface: #111113;
+  --surface-raised: #18181b;
+  --border: #27272a;
+  --border-highlight: #3f3f46;
 }
 
 @theme inline {
@@ -12,15 +18,35 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+.carbon-bg {
+  background-color: #0a0a0a;
+  background-image:
+    linear-gradient(45deg, #0f0f0f 25%, transparent 25%),
+    linear-gradient(-45deg, #0f0f0f 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #0f0f0f 75%),
+    linear-gradient(-45deg, transparent 75%, #0f0f0f 75%);
+  background-size: 4px 4px;
+  background-position: 0 0, 0 2px, 2px -2px, -2px 0px;
+}
+
+.carbon-surface {
+  background-color: #111113;
+  background-image:
+    linear-gradient(45deg, #151517 25%, transparent 25%),
+    linear-gradient(-45deg, #151517 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #151517 75%),
+    linear-gradient(-45deg, transparent 75%, #151517 75%);
+  background-size: 4px 4px;
+  background-position: 0 0, 0 2px, 2px -2px, -2px 0px;
+}
+
+.glow-line {
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  height: 1px;
 }
