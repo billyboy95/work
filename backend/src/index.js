@@ -1,6 +1,11 @@
-const app = require("./app");
-const config = require("./config");
+const createRuntime = require("./runtime");
 
-app.listen(config.port, () => {
-  console.log(`Zentrix API running on http://localhost:${config.port} [${config.nodeEnv}]`);
+const runtime = createRuntime();
+
+runtime.taskService.startWorker();
+
+runtime.app.listen(runtime.config.port, () => {
+  console.log(
+    `Zentrix API running on http://localhost:${runtime.config.port} [${runtime.config.nodeEnv}]`,
+  );
 });
