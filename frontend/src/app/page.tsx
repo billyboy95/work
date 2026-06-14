@@ -11,6 +11,7 @@ type Agent = {
   model: string;
   status: string;
   createdAt: string;
+  updatedAt: string;
 };
 
 type Task = {
@@ -20,7 +21,30 @@ type Task = {
   agentId: string | null;
   status: string;
   createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  nextRetryAt: string | null;
+  result: string | null;
+  lastError: string | null;
+  attemptCount: number;
+  maxAttempts: number;
 };
+
+function getStatusClasses(status: string) {
+  switch (status) {
+    case "completed":
+      return "bg-emerald-900 text-emerald-300";
+    case "running":
+      return "bg-blue-900 text-blue-300";
+    case "retrying":
+      return "bg-amber-900 text-amber-300";
+    case "failed":
+      return "bg-red-900 text-red-300";
+    default:
+      return "bg-zinc-800 text-zinc-400";
+  }
+}
 
 export default function Dashboard() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -28,6 +52,8 @@ export default function Dashboard() {
   const [newAgentName, setNewAgentName] = useState("");
   const [newAgentDesc, setNewAgentDesc] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDesc, setNewTaskDesc] = useState("");
+  const [newTaskAgentId, setNewTaskAgentId] = useState("");
   const [apiStatus, setApiStatus] = useState<"checking" | "online" | "offline">("checking");
 
   const fetchAgents = useCallback(async () => {
@@ -50,38 +76,34 @@ export default function Dashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function init() {
-      try {
-        const healthRes = await fetch(`${API_BASE}/api/health`);
-        await healthRes.json();
-        if (!cancelled) setApiStatus("online");
-      } catch {
-        if (!cancelled) setApiStatus("offline");
+  const refreshDashboard = useCallback(async () => {
+    try {
+      const healthRes = await fetch(`${API_BASE}/api/health`);
+      if (!healthRes.ok) {
+        throw new Error("Health check failed");
       }
 
-      try {
-        const agentsRes = await fetch(`${API_BASE}/api/agents`);
-        const agentsData = await agentsRes.json();
-        if (!cancelled) setAgents(agentsData.agents);
-      } catch {
-        /* API may be offline */
-      }
-
-      try {
-        const tasksRes = await fetch(`${API_BASE}/api/tasks`);
-        const tasksData = await tasksRes.json();
-        if (!cancelled) setTasks(tasksData.tasks);
-      } catch {
-        /* API may be offline */
-      }
+      setApiStatus("online");
+      await Promise.all([fetchAgents(), fetchTasks()]);
+    } catch {
+      setApiStatus("offline");
     }
+  }, [fetchAgents, fetchTasks]);
 
-    init();
-    return () => { cancelled = true; };
-  }, []);
+  useEffect(() => {
+    const initialRefreshId = window.setTimeout(() => {
+      void refreshDashboard();
+    }, 0);
+
+    const intervalId = window.setInterval(() => {
+      void refreshDashboard();
+    }, 2000);
+
+    return () => {
+      window.clearTimeout(initialRefreshId);
+      window.clearInterval(intervalId);
+    };
+  }, [refreshDashboard]);
 
   const createAgent = async () => {
     if (!newAgentName.trim()) return;
@@ -100,9 +122,15 @@ export default function Dashboard() {
     await fetch(`${API_BASE}/api/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: newTaskTitle }),
+      body: JSON.stringify({
+        title: newTaskTitle,
+        description: newTaskDesc,
+        agentId: newTaskAgentId || null,
+      }),
     });
     setNewTaskTitle("");
+    setNewTaskDesc("");
+    setNewTaskAgentId("");
     fetchTasks();
   };
 
@@ -110,6 +138,8 @@ export default function Dashboard() {
     await fetch(`${API_BASE}/api/agents/${id}`, { method: "DELETE" });
     fetchAgents();
   };
+
+  const agentNames = new Map(agents.map((agent) => [agent.id, agent.name]));
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -180,11 +210,7 @@ export default function Dashboard() {
                   <div className="mt-3 flex items-center gap-2 text-xs text-zinc-400">
                     <span className="rounded bg-zinc-800 px-2 py-0.5">{agent.model}</span>
                     <span
-                      className={`rounded px-2 py-0.5 ${
-                        agent.status === "idle"
-                          ? "bg-zinc-800"
-                          : "bg-emerald-900 text-emerald-300"
-                      }`}
+                      className={`rounded px-2 py-0.5 ${getStatusClasses(agent.status)}`}
                     >
                       {agent.status}
                     </span>
@@ -198,20 +224,42 @@ export default function Dashboard() {
         {/* Tasks Section */}
         <section>
           <h2 className="mb-4 text-lg font-semibold text-zinc-200">Tasks</h2>
-          <div className="mb-4 flex gap-3">
+          <div className="mb-3 grid gap-3 lg:grid-cols-[1.2fr_1.6fr_1fr_auto]">
             <input
               value={newTaskTitle}
               onChange={(e) => setNewTaskTitle(e.target.value)}
               placeholder="Task title"
-              className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
             />
+            <input
+              value={newTaskDesc}
+              onChange={(e) => setNewTaskDesc(e.target.value)}
+              placeholder="Task description"
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+            />
+            <select
+              value={newTaskAgentId}
+              onChange={(e) => setNewTaskAgentId(e.target.value)}
+              className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-300 focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="">Platform executor</option>
+              {agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </select>
             <button
               onClick={createTask}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500 transition-colors"
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-indigo-500"
             >
               Add Task
             </button>
           </div>
+          <p className="mb-4 text-xs text-zinc-500">
+            Tasks now execute automatically. Use “fail” in the title or description to test retry and
+            failure handling.
+          </p>
           {tasks.length === 0 ? (
             <p className="text-sm text-zinc-500">No tasks yet. Add one above.</p>
           ) : (
@@ -219,25 +267,49 @@ export default function Dashboard() {
               {tasks.map((task) => (
                 <div
                   key={task.id}
-                  className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3"
+                  className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3"
                 >
-                  <div>
-                    <span className="font-medium text-zinc-200">{task.title}</span>
-                    <span className="ml-2 text-xs text-zinc-500">
-                      {new Date(task.createdAt).toLocaleString()}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-zinc-200">{task.title}</span>
+                        <span className="text-xs text-zinc-500">
+                          {new Date(task.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                      {task.description ? (
+                        <p className="mt-2 text-sm text-zinc-400">{task.description}</p>
+                      ) : null}
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-400">
+                        <span className="rounded bg-zinc-800 px-2 py-0.5">
+                          Attempts {task.attemptCount} / {task.maxAttempts}
+                        </span>
+                        <span className="rounded bg-zinc-800 px-2 py-0.5">
+                          {task.agentId ? `Agent: ${agentNames.get(task.agentId) || "Unknown"}` : "Platform executor"}
+                        </span>
+                        {task.nextRetryAt ? (
+                          <span className="rounded bg-zinc-800 px-2 py-0.5">
+                            Retry at {new Date(task.nextRetryAt).toLocaleTimeString()}
+                          </span>
+                        ) : null}
+                      </div>
+                      {task.result ? (
+                        <p className="mt-3 rounded-lg border border-emerald-800/60 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-200">
+                          {task.result}
+                        </p>
+                      ) : null}
+                      {task.lastError ? (
+                        <p className="mt-3 rounded-lg border border-red-800/60 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+                          {task.lastError}
+                        </p>
+                      ) : null}
+                    </div>
+                    <span
+                      className={`rounded px-2 py-0.5 text-xs ${getStatusClasses(task.status)}`}
+                    >
+                      {task.status}
                     </span>
                   </div>
-                  <span
-                    className={`rounded px-2 py-0.5 text-xs ${
-                      task.status === "completed"
-                        ? "bg-emerald-900 text-emerald-300"
-                        : task.status === "running"
-                        ? "bg-blue-900 text-blue-300"
-                        : "bg-zinc-800 text-zinc-400"
-                    }`}
-                  >
-                    {task.status}
-                  </span>
                 </div>
               ))}
             </div>
