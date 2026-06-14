@@ -33,6 +33,8 @@ function createRuntime(overrides = {}) {
     }),
   });
 
+  taskService.recoverInterruptedTasks();
+
   const app = createApp({
     agentsStore,
     taskService,

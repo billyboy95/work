@@ -35,4 +35,45 @@ describe("Persistence", () => {
 
     await secondRuntime.cleanup();
   });
+
+  it("recovers interrupted running tasks on startup", async () => {
+    const firstRuntime = createTestRuntime();
+
+    const agentRes = await request(firstRuntime.app)
+      .post("/api/agents")
+      .send({ name: "Recovery Agent", description: "Recovers work" });
+
+    const taskRes = await request(firstRuntime.app)
+      .post("/api/tasks")
+      .send({ title: "Recover this task", agentId: agentRes.body.id });
+
+    firstRuntime.tasksStore.set({
+      ...firstRuntime.tasksStore.get(taskRes.body.id),
+      status: "running",
+      attemptCount: 1,
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await firstRuntime.cleanup({ removeDataDir: false });
+
+    const secondRuntime = createTestRuntime({ dataDir: firstRuntime.dataDir });
+    secondRuntime.taskService.startWorker();
+
+    const recoveredTask = await secondRuntime.taskService.waitForTaskStatus(
+      taskRes.body.id,
+      "completed",
+      { timeoutMs: 3000 },
+    );
+
+    expect(recoveredTask.status).toBe("completed");
+    expect(recoveredTask.attemptCount).toBe(2);
+    expect(recoveredTask.lastError).toBeNull();
+
+    const agentState = await request(secondRuntime.app).get(`/api/agents/${agentRes.body.id}`);
+    expect(agentState.status).toBe(200);
+    expect(agentState.body.status).toBe("idle");
+
+    await secondRuntime.cleanup();
+  });
 });

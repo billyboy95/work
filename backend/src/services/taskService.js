@@ -236,6 +236,28 @@ function createTaskService(options) {
     return updatedTask;
   }
 
+  function recoverInterruptedTasks() {
+    const timestamp = isoNow();
+
+    tasksStore
+      .list()
+      .filter((task) => task.status === "running")
+      .forEach((task) => {
+        const canRetry = task.attemptCount < task.maxAttempts;
+        const recoveredTask = {
+          ...task,
+          status: canRetry ? "retrying" : "failed",
+          updatedAt: timestamp,
+          completedAt: canRetry ? null : timestamp,
+          nextRetryAt: canRetry ? timestamp : null,
+          lastError: task.lastError || "Execution interrupted before completion",
+        };
+
+        tasksStore.set(recoveredTask);
+        setAgentStatus(task.agentId, "idle");
+      });
+  }
+
   async function runTask(task) {
     const startedTask = startTask(task);
 
@@ -326,6 +348,7 @@ function createTaskService(options) {
     getTask,
     createTask,
     updateTask,
+    recoverInterruptedTasks,
     runDueTasks,
     startWorker,
     stopWorker,
