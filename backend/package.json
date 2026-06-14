@@ -4,7 +4,7 @@
   "private": true,
   "description": "Zentrix Agent Platform - Backend API",
   "scripts": {
-    "dev": "nodemon --ignore data/** src/index.js",
+    "dev": "nodemon src/index.js",
     "start": "node src/index.js",
     "test": "jest --detectOpenHandles --forceExit",
     "test:watch": "jest --watch",
