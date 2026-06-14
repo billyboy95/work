@@ -91,13 +91,16 @@ export default function Dashboard() {
   }, [fetchAgents, fetchTasks]);
 
   useEffect(() => {
-    void refreshDashboard();
+    const initialRefreshId = window.setTimeout(() => {
+      void refreshDashboard();
+    }, 0);
 
     const intervalId = window.setInterval(() => {
       void refreshDashboard();
     }, 2000);
 
     return () => {
+      window.clearTimeout(initialRefreshId);
       window.clearInterval(intervalId);
     };
   }, [refreshDashboard]);
