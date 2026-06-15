@@ -1,57 +1,79 @@
 const { Router } = require("express");
 const { v4: uuidv4 } = require("uuid");
 
-const router = Router();
+function createAgentRoutes(runtime) {
+  const router = Router();
+  const { agentsStore } = runtime;
 
-const agents = new Map();
+  router.get("/", (_req, res) => {
+    const agents = agentsStore
+      .list()
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
-router.get("/", (_req, res) => {
-  res.json({ agents: Array.from(agents.values()) });
-});
+    res.json({ agents });
+  });
 
-router.get("/:id", (req, res) => {
-  const agent = agents.get(req.params.id);
-  if (!agent) return res.status(404).json({ error: "Agent not found" });
-  res.json(agent);
-});
+  router.get("/:id", (req, res) => {
+    const agent = agentsStore.get(req.params.id);
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
 
-router.post("/", (req, res) => {
-  const { name, description, model } = req.body;
-  if (!name) return res.status(400).json({ error: "name is required" });
+    res.json(agent);
+  });
 
-  const agent = {
-    id: uuidv4(),
-    name,
-    description: description || "",
-    model: model || "gpt-4",
-    status: "idle",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
+  router.post("/", (req, res) => {
+    const { name, description, model } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: "name is required" });
+    }
 
-  agents.set(agent.id, agent);
-  res.status(201).json(agent);
-});
+    const timestamp = new Date().toISOString();
+    const agent = {
+      id: uuidv4(),
+      name,
+      description: description || "",
+      model: model || "gpt-4",
+      status: "idle",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
 
-router.put("/:id", (req, res) => {
-  const agent = agents.get(req.params.id);
-  if (!agent) return res.status(404).json({ error: "Agent not found" });
+    agentsStore.set(agent);
+    return res.status(201).json(agent);
+  });
 
-  const { name, description, model, status } = req.body;
-  if (name !== undefined) agent.name = name;
-  if (description !== undefined) agent.description = description;
-  if (model !== undefined) agent.model = model;
-  if (status !== undefined) agent.status = status;
-  agent.updatedAt = new Date().toISOString();
+  router.put("/:id", (req, res) => {
+    const agent = agentsStore.get(req.params.id);
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
 
-  agents.set(agent.id, agent);
-  res.json(agent);
-});
+    const { name, description, model, status } = req.body;
+    const nextAgent = {
+      ...agent,
+      updatedAt: new Date().toISOString(),
+    };
 
-router.delete("/:id", (req, res) => {
-  if (!agents.has(req.params.id)) return res.status(404).json({ error: "Agent not found" });
-  agents.delete(req.params.id);
-  res.status(204).end();
-});
+    if (name !== undefined) nextAgent.name = name;
+    if (description !== undefined) nextAgent.description = description;
+    if (model !== undefined) nextAgent.model = model;
+    if (status !== undefined) nextAgent.status = status;
 
-module.exports = router;
+    agentsStore.set(nextAgent);
+    return res.json(nextAgent);
+  });
+
+  router.delete("/:id", (req, res) => {
+    const deleted = agentsStore.delete(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+
+    return res.status(204).end();
+  });
+
+  return router;
+}
+
+module.exports = createAgentRoutes;
