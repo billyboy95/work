@@ -8,8 +8,8 @@ describe("Tasks API", () => {
     context = createTestContext();
   });
 
-  afterEach(() => {
-    context.cleanup();
+  afterEach(async () => {
+    await context.cleanup();
   });
 
   it("POST /api/tasks creates a task", async () => {

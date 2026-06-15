@@ -9,8 +9,8 @@ describe("Agents API", () => {
     context = createTestContext();
   });
 
-  afterEach(() => {
-    context.cleanup();
+  afterEach(async () => {
+    await context.cleanup();
   });
 
   it("GET /api/agents returns empty list", async () => {

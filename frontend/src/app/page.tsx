@@ -76,12 +76,15 @@ export default function Dashboard() {
   }, [fetchAgents, fetchHealth, fetchTasks]);
 
   useEffect(() => {
-    void refreshDashboard();
+    const timeoutId = window.setTimeout(() => {
+      void refreshDashboard();
+    }, 0);
     const intervalId = window.setInterval(() => {
       void refreshDashboard();
     }, 2000);
 
     return () => {
+      window.clearTimeout(timeoutId);
       window.clearInterval(intervalId);
     };
   }, [refreshDashboard]);

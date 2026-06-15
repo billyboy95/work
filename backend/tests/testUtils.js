@@ -17,8 +17,9 @@ function createTestContext(options = {}) {
   return {
     app,
     runtime,
-    cleanup() {
+    async cleanup() {
       runtime.stop();
+      await runtime.waitForIdle();
       fs.rmSync(dataDir, { recursive: true, force: true });
     },
   };

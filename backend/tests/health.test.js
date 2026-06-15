@@ -8,8 +8,8 @@ describe("Health API", () => {
     context = createTestContext();
   });
 
-  afterEach(() => {
-    context.cleanup();
+  afterEach(async () => {
+    await context.cleanup();
   });
 
   it("GET /api/health returns ok", async () => {

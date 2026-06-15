@@ -38,6 +38,9 @@ function createRuntime(options = {}) {
     async flush() {
       await taskService.tick();
     },
+    async waitForIdle() {
+      await taskService.waitForIdle();
+    },
     stop() {
       if (!intervalHandle) {
         return;
