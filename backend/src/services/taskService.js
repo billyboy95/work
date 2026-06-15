@@ -14,7 +14,7 @@ function sortByCreatedAtDescending(records) {
 }
 
 function createTaskService({ agentsStore, tasksStore, maxAttempts = 2 }) {
-  let isTickRunning = false;
+  let activeTickPromise = null;
 
   function listTasks() {
     return sortByCreatedAtDescending(tasksStore.list());
@@ -182,22 +182,26 @@ function createTaskService({ agentsStore, tasksStore, maxAttempts = 2 }) {
   }
 
   async function tick() {
-    if (isTickRunning) {
-      return;
+    if (activeTickPromise) {
+      return activeTickPromise;
     }
 
-    const nextTask = getNextEligibleTask();
-    if (!nextTask) {
-      return;
-    }
+    activeTickPromise = (async () => {
+      const nextTask = getNextEligibleTask();
+      if (!nextTask) {
+        return;
+      }
 
-    isTickRunning = true;
-
-    try {
       await processTask(nextTask);
-    } finally {
-      isTickRunning = false;
-    }
+    })().finally(() => {
+      activeTickPromise = null;
+    });
+
+    return activeTickPromise;
+  }
+
+  function waitForIdle() {
+    return activeTickPromise || Promise.resolve();
   }
 
   function recoverInterruptedTasks() {
@@ -231,6 +235,7 @@ function createTaskService({ agentsStore, tasksStore, maxAttempts = 2 }) {
     createTask,
     updateTaskStatus,
     tick,
+    waitForIdle,
     recoverInterruptedTasks,
   };
 }
