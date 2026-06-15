@@ -1,50 +1,56 @@
 const { Router } = require("express");
-const { v4: uuidv4 } = require("uuid");
 
-const router = Router();
+function createTaskRoutes(runtime) {
+  const router = Router();
+  const { taskService } = runtime;
 
-const tasks = new Map();
+  router.get("/", (_req, res) => {
+    res.json({ tasks: taskService.listTasks() });
+  });
 
-router.get("/", (_req, res) => {
-  res.json({ tasks: Array.from(tasks.values()) });
-});
+  router.get("/:id", (req, res) => {
+    const task = taskService.getTask(req.params.id);
+    if (!task) {
+      return res.status(404).json({ error: "Task not found" });
+    }
 
-router.get("/:id", (req, res) => {
-  const task = tasks.get(req.params.id);
-  if (!task) return res.status(404).json({ error: "Task not found" });
-  res.json(task);
-});
+    return res.json(task);
+  });
 
-router.post("/", (req, res) => {
-  const { title, description, agentId } = req.body;
-  if (!title) return res.status(400).json({ error: "title is required" });
+  router.post("/", (req, res) => {
+    try {
+      const task = taskService.createTask(req.body);
+      runtime.flush().catch((error) => {
+        console.error("Immediate task flush failed:", error);
+      });
 
-  const task = {
-    id: uuidv4(),
-    title,
-    description: description || "",
-    agentId: agentId || null,
-    status: "pending",
-    result: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
+      return res.status(201).json(task);
+    } catch (error) {
+      return res.status(error.statusCode || 500).json({ error: error.message });
+    }
+  });
 
-  tasks.set(task.id, task);
-  res.status(201).json(task);
-});
+  router.put("/:id/status", (req, res) => {
+    try {
+      const { status, result } = req.body;
+      const patch = {};
 
-router.put("/:id/status", (req, res) => {
-  const task = tasks.get(req.params.id);
-  if (!task) return res.status(404).json({ error: "Task not found" });
+      if (status !== undefined) {
+        patch.status = status;
+      }
 
-  const { status, result } = req.body;
-  if (status) task.status = status;
-  if (result !== undefined) task.result = result;
-  task.updatedAt = new Date().toISOString();
+      if (result !== undefined) {
+        patch.result = result;
+      }
 
-  tasks.set(task.id, task);
-  res.json(task);
-});
+      const task = taskService.updateTaskStatus(req.params.id, patch);
+      return res.json(task);
+    } catch (error) {
+      return res.status(error.statusCode || 500).json({ error: error.message });
+    }
+  });
 
-module.exports = router;
+  return router;
+}
+
+module.exports = createTaskRoutes;
