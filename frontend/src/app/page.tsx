@@ -11,6 +11,7 @@ type Agent = {
   model: string;
   status: string;
   createdAt: string;
+  updatedAt: string;
 };
 
 type Task = {
@@ -19,7 +20,15 @@ type Task = {
   description: string;
   agentId: string | null;
   status: string;
+  result: string | null;
+  lastError: string | null;
+  attemptCount: number;
+  maxAttempts: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  nextRetryAt: string | null;
   createdAt: string;
+  updatedAt: string;
 };
 
 export default function Dashboard() {
@@ -28,6 +37,8 @@ export default function Dashboard() {
   const [newAgentName, setNewAgentName] = useState("");
   const [newAgentDesc, setNewAgentDesc] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDesc, setNewTaskDesc] = useState("");
+  const [selectedAgentId, setSelectedAgentId] = useState("");
   const [apiStatus, setApiStatus] = useState<"checking" | "online" | "offline">("checking");
 
   const fetchAgents = useCallback(async () => {
@@ -50,38 +61,33 @@ export default function Dashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function init() {
-      try {
-        const healthRes = await fetch(`${API_BASE}/api/health`);
-        await healthRes.json();
-        if (!cancelled) setApiStatus("online");
-      } catch {
-        if (!cancelled) setApiStatus("offline");
-      }
-
-      try {
-        const agentsRes = await fetch(`${API_BASE}/api/agents`);
-        const agentsData = await agentsRes.json();
-        if (!cancelled) setAgents(agentsData.agents);
-      } catch {
-        /* API may be offline */
-      }
-
-      try {
-        const tasksRes = await fetch(`${API_BASE}/api/tasks`);
-        const tasksData = await tasksRes.json();
-        if (!cancelled) setTasks(tasksData.tasks);
-      } catch {
-        /* API may be offline */
-      }
+  const fetchHealth = useCallback(async () => {
+    try {
+      const healthRes = await fetch(`${API_BASE}/api/health`);
+      await healthRes.json();
+      setApiStatus("online");
+    } catch {
+      setApiStatus("offline");
     }
-
-    init();
-    return () => { cancelled = true; };
   }, []);
+
+  const refreshDashboard = useCallback(async () => {
+    await Promise.all([fetchHealth(), fetchAgents(), fetchTasks()]);
+  }, [fetchAgents, fetchHealth, fetchTasks]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void refreshDashboard();
+    }, 0);
+    const intervalId = window.setInterval(() => {
+      void refreshDashboard();
+    }, 2000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
+    };
+  }, [refreshDashboard]);
 
   const createAgent = async () => {
     if (!newAgentName.trim()) return;
@@ -92,7 +98,7 @@ export default function Dashboard() {
     });
     setNewAgentName("");
     setNewAgentDesc("");
-    fetchAgents();
+    await fetchAgents();
   };
 
   const createTask = async () => {
@@ -100,15 +106,35 @@ export default function Dashboard() {
     await fetch(`${API_BASE}/api/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: newTaskTitle }),
+      body: JSON.stringify({
+        title: newTaskTitle,
+        description: newTaskDesc,
+        agentId: selectedAgentId || null,
+      }),
     });
     setNewTaskTitle("");
-    fetchTasks();
+    setNewTaskDesc("");
+    setSelectedAgentId("");
+    await fetchTasks();
+    await fetchAgents();
   };
 
   const deleteAgent = async (id: string) => {
     await fetch(`${API_BASE}/api/agents/${id}`, { method: "DELETE" });
-    fetchAgents();
+    await fetchAgents();
+  };
+
+  const getAgentName = (agentId: string | null) => {
+    if (!agentId) return "System runner";
+    return agents.find((agent) => agent.id === agentId)?.name || "Unknown agent";
+  };
+
+  const getTaskStatusClasses = (status: string) => {
+    if (status === "completed") return "bg-emerald-900 text-emerald-300";
+    if (status === "running") return "bg-blue-900 text-blue-300";
+    if (status === "retrying") return "bg-amber-900 text-amber-300";
+    if (status === "failed") return "bg-red-900 text-red-300";
+    return "bg-zinc-800 text-zinc-400";
   };
 
   return (
@@ -136,7 +162,7 @@ export default function Dashboard() {
         {/* Agents Section */}
         <section>
           <h2 className="mb-4 text-lg font-semibold text-zinc-200">Agents</h2>
-          <div className="mb-4 flex gap-3">
+          <div className="mb-4 flex flex-col gap-3 lg:flex-row">
             <input
               value={newAgentName}
               onChange={(e) => setNewAgentName(e.target.value)}
@@ -198,19 +224,40 @@ export default function Dashboard() {
         {/* Tasks Section */}
         <section>
           <h2 className="mb-4 text-lg font-semibold text-zinc-200">Tasks</h2>
-          <div className="mb-4 flex gap-3">
-            <input
-              value={newTaskTitle}
-              onChange={(e) => setNewTaskTitle(e.target.value)}
-              placeholder="Task title"
-              className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+          <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+            <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr_auto]">
+              <input
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                placeholder="Task title"
+                className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+              />
+              <select
+                value={selectedAgentId}
+                onChange={(e) => setSelectedAgentId(e.target.value)}
+                className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-200 focus:border-indigo-500 focus:outline-none"
+              >
+                <option value="">Assign to system runner</option>
+                {agents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={createTask}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-indigo-500"
+              >
+                Add Task
+              </button>
+            </div>
+            <textarea
+              value={newTaskDesc}
+              onChange={(e) => setNewTaskDesc(e.target.value)}
+              placeholder="Task description or execution notes"
+              rows={3}
+              className="mt-3 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
             />
-            <button
-              onClick={createTask}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium hover:bg-indigo-500 transition-colors"
-            >
-              Add Task
-            </button>
           </div>
           {tasks.length === 0 ? (
             <p className="text-sm text-zinc-500">No tasks yet. Add one above.</p>
@@ -219,25 +266,57 @@ export default function Dashboard() {
               {tasks.map((task) => (
                 <div
                   key={task.id}
-                  className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3"
+                  className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-4"
                 >
-                  <div>
-                    <span className="font-medium text-zinc-200">{task.title}</span>
-                    <span className="ml-2 text-xs text-zinc-500">
-                      {new Date(task.createdAt).toLocaleString()}
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-zinc-200">{task.title}</span>
+                        <span className="text-xs text-zinc-500">
+                          Created {new Date(task.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                      {task.description ? (
+                        <p className="max-w-3xl text-sm text-zinc-400">{task.description}</p>
+                      ) : null}
+                      <div className="flex flex-wrap gap-2 text-xs text-zinc-400">
+                        <span className="rounded bg-zinc-800 px-2 py-1">
+                          Runner: {getAgentName(task.agentId)}
+                        </span>
+                        <span className="rounded bg-zinc-800 px-2 py-1">
+                          Attempts: {task.attemptCount}/{task.maxAttempts}
+                        </span>
+                        {task.startedAt ? (
+                          <span className="rounded bg-zinc-800 px-2 py-1">
+                            Started: {new Date(task.startedAt).toLocaleString()}
+                          </span>
+                        ) : null}
+                        {task.completedAt ? (
+                          <span className="rounded bg-zinc-800 px-2 py-1">
+                            Finished: {new Date(task.completedAt).toLocaleString()}
+                          </span>
+                        ) : null}
+                        {task.nextRetryAt ? (
+                          <span className="rounded bg-zinc-800 px-2 py-1">
+                            Retry at: {new Date(task.nextRetryAt).toLocaleString()}
+                          </span>
+                        ) : null}
+                      </div>
+                      {task.result ? (
+                        <p className="rounded-lg border border-emerald-900 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-200">
+                          {task.result}
+                        </p>
+                      ) : null}
+                      {task.lastError ? (
+                        <p className="rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+                          {task.lastError}
+                        </p>
+                      ) : null}
+                    </div>
+                    <span className={`h-fit rounded px-2 py-1 text-xs ${getTaskStatusClasses(task.status)}`}>
+                      {task.status}
                     </span>
                   </div>
-                  <span
-                    className={`rounded px-2 py-0.5 text-xs ${
-                      task.status === "completed"
-                        ? "bg-emerald-900 text-emerald-300"
-                        : task.status === "running"
-                        ? "bg-blue-900 text-blue-300"
-                        : "bg-zinc-800 text-zinc-400"
-                    }`}
-                  >
-                    {task.status}
-                  </span>
                 </div>
               ))}
             </div>
