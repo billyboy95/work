@@ -1,16 +1,21 @@
 const { Router } = require("express");
 const { v4: uuidv4 } = require("uuid");
+const {
+  listAgents,
+  getAgent,
+  setAgent,
+  deleteAgent,
+  hasAgent,
+} = require("../stores/agentsStore");
 
 const router = Router();
 
-const agents = new Map();
-
 router.get("/", (_req, res) => {
-  res.json({ agents: Array.from(agents.values()) });
+  res.json({ agents: listAgents() });
 });
 
 router.get("/:id", (req, res) => {
-  const agent = agents.get(req.params.id);
+  const agent = getAgent(req.params.id);
   if (!agent) return res.status(404).json({ error: "Agent not found" });
   res.json(agent);
 });
@@ -29,12 +34,12 @@ router.post("/", (req, res) => {
     updatedAt: new Date().toISOString(),
   };
 
-  agents.set(agent.id, agent);
+  setAgent(agent);
   res.status(201).json(agent);
 });
 
 router.put("/:id", (req, res) => {
-  const agent = agents.get(req.params.id);
+  const agent = getAgent(req.params.id);
   if (!agent) return res.status(404).json({ error: "Agent not found" });
 
   const { name, description, model, status } = req.body;
@@ -44,13 +49,13 @@ router.put("/:id", (req, res) => {
   if (status !== undefined) agent.status = status;
   agent.updatedAt = new Date().toISOString();
 
-  agents.set(agent.id, agent);
+  setAgent(agent);
   res.json(agent);
 });
 
 router.delete("/:id", (req, res) => {
-  if (!agents.has(req.params.id)) return res.status(404).json({ error: "Agent not found" });
-  agents.delete(req.params.id);
+  if (!hasAgent(req.params.id)) return res.status(404).json({ error: "Agent not found" });
+  deleteAgent(req.params.id);
   res.status(204).end();
 });
 
