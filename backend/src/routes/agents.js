@@ -1,9 +1,9 @@
 const { Router } = require("express");
 const { v4: uuidv4 } = require("uuid");
+const { agents } = require("../stores/agentsStore");
+const { tasks } = require("../stores/tasksStore");
 
 const router = Router();
-
-const agents = new Map();
 
 router.get("/", (_req, res) => {
   res.json({ agents: Array.from(agents.values()) });
@@ -50,7 +50,20 @@ router.put("/:id", (req, res) => {
 
 router.delete("/:id", (req, res) => {
   if (!agents.has(req.params.id)) return res.status(404).json({ error: "Agent not found" });
+
+  const deletedAgentId = req.params.id;
   agents.delete(req.params.id);
+
+  for (const task of tasks.values()) {
+    if (task.agentId !== deletedAgentId) {
+      continue;
+    }
+
+    task.agentId = null;
+    task.updatedAt = new Date().toISOString();
+    tasks.set(task.id, task);
+  }
+
   res.status(204).end();
 });
 
