@@ -101,13 +101,16 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    void refreshDashboard(true);
+    const timeoutId = window.setTimeout(() => {
+      void refreshDashboard(true);
+    }, 0);
 
     const intervalId = window.setInterval(() => {
       void refreshDashboard(true);
     }, 15000);
 
     return () => {
+      window.clearTimeout(timeoutId);
       window.clearInterval(intervalId);
     };
   }, [refreshDashboard]);
