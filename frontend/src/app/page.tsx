@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -11,6 +11,7 @@ type Agent = {
   model: string;
   status: string;
   createdAt: string;
+  updatedAt: string;
 };
 
 type Task = {
@@ -19,69 +20,161 @@ type Task = {
   description: string;
   agentId: string | null;
   status: string;
+  result: string | null;
   createdAt: string;
+  updatedAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  failedAt?: string | null;
 };
+
+type Stats = {
+  generatedAt: string;
+  uptimeSeconds: number;
+  tasks: {
+    total: number;
+    byStatus: {
+      pending: number;
+      running: number;
+      completed: number;
+      failed: number;
+    };
+    stale: {
+      pendingOlderThan5m: number;
+      runningOlderThan15m: number;
+    };
+  };
+  agents: {
+    total: number;
+    byStatus: {
+      idle: number;
+      busy: number;
+    };
+  };
+};
+
+const emptyStats: Stats = {
+  generatedAt: "",
+  uptimeSeconds: 0,
+  tasks: {
+    total: 0,
+    byStatus: {
+      pending: 0,
+      running: 0,
+      completed: 0,
+      failed: 0,
+    },
+    stale: {
+      pendingOlderThan5m: 0,
+      runningOlderThan15m: 0,
+    },
+  },
+  agents: {
+    total: 0,
+    byStatus: {
+      idle: 0,
+      busy: 0,
+    },
+  },
+};
+
+function formatTimestamp(timestamp?: string | null) {
+  if (!timestamp) {
+    return "n/a";
+  }
+
+  return new Date(timestamp).toLocaleString();
+}
+
+function formatUptime(totalSeconds: number) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+
+  return `${seconds}s`;
+}
+
+function getAgentStatusClassName(status: string) {
+  return status === "idle" ? "bg-zinc-800" : "bg-emerald-900 text-emerald-300";
+}
+
+function getTaskStatusClassName(status: string) {
+  if (status === "completed") {
+    return "bg-emerald-900 text-emerald-300";
+  }
+
+  if (status === "running") {
+    return "bg-blue-900 text-blue-300";
+  }
+
+  if (status === "failed") {
+    return "bg-red-900 text-red-300";
+  }
+
+  return "bg-zinc-800 text-zinc-400";
+}
 
 export default function Dashboard() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [stats, setStats] = useState<Stats>(emptyStats);
   const [newAgentName, setNewAgentName] = useState("");
   const [newAgentDesc, setNewAgentDesc] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [apiStatus, setApiStatus] = useState<"checking" | "online" | "offline">("checking");
+  const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchAgents = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/agents`);
-      const data = await res.json();
-      setAgents(data.agents);
-    } catch {
-      /* API may be offline */
-    }
-  }, []);
+  const refreshDashboard = useCallback(async () => {
+    setIsRefreshing(true);
 
-  const fetchTasks = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/tasks`);
-      const data = await res.json();
-      setTasks(data.tasks);
+      const [healthRes, agentsRes, tasksRes, statsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/health`),
+        fetch(`${API_BASE}/api/agents`),
+        fetch(`${API_BASE}/api/tasks`),
+        fetch(`${API_BASE}/api/stats`),
+      ]);
+
+      if (!healthRes.ok || !agentsRes.ok || !tasksRes.ok || !statsRes.ok) {
+        throw new Error("Failed to refresh dashboard");
+      }
+
+      const [agentsData, tasksData, statsData] = await Promise.all([
+        agentsRes.json(),
+        tasksRes.json(),
+        statsRes.json(),
+      ]);
+
+      setApiStatus("online");
+      setAgents(agentsData.agents);
+      setTasks(tasksData.tasks);
+      setStats(statsData);
+      setLastRefreshed(new Date().toISOString());
     } catch {
-      /* API may be offline */
+      setApiStatus("offline");
+    } finally {
+      setIsRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    void refreshDashboard();
 
-    async function init() {
-      try {
-        const healthRes = await fetch(`${API_BASE}/api/health`);
-        await healthRes.json();
-        if (!cancelled) setApiStatus("online");
-      } catch {
-        if (!cancelled) setApiStatus("offline");
-      }
+    const intervalId = window.setInterval(() => {
+      void refreshDashboard();
+    }, 10000);
 
-      try {
-        const agentsRes = await fetch(`${API_BASE}/api/agents`);
-        const agentsData = await agentsRes.json();
-        if (!cancelled) setAgents(agentsData.agents);
-      } catch {
-        /* API may be offline */
-      }
-
-      try {
-        const tasksRes = await fetch(`${API_BASE}/api/tasks`);
-        const tasksData = await tasksRes.json();
-        if (!cancelled) setTasks(tasksData.tasks);
-      } catch {
-        /* API may be offline */
-      }
-    }
-
-    init();
-    return () => { cancelled = true; };
-  }, []);
+    return () => window.clearInterval(intervalId);
+  }, [refreshDashboard]);
 
   const createAgent = async () => {
     if (!newAgentName.trim()) return;
@@ -92,7 +185,7 @@ export default function Dashboard() {
     });
     setNewAgentName("");
     setNewAgentDesc("");
-    fetchAgents();
+    await refreshDashboard();
   };
 
   const createTask = async () => {
@@ -103,13 +196,21 @@ export default function Dashboard() {
       body: JSON.stringify({ title: newTaskTitle }),
     });
     setNewTaskTitle("");
-    fetchTasks();
+    await refreshDashboard();
   };
 
   const deleteAgent = async (id: string) => {
     await fetch(`${API_BASE}/api/agents/${id}`, { method: "DELETE" });
-    fetchAgents();
+    await refreshDashboard();
   };
+
+  const agentNames = useMemo(
+    () => new Map(agents.map((agent) => [agent.id, agent.name])),
+    [agents]
+  );
+
+  const staleTaskCount =
+    stats.tasks.stale.pendingOlderThan5m + stats.tasks.stale.runningOlderThan15m;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -132,7 +233,68 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-8 space-y-8">
+      <main className="mx-auto max-w-6xl space-y-8 px-6 py-8">
+        <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-100">Operations Summary</h2>
+              <p className="mt-1 text-sm text-zinc-400">
+                Monitor live workflow health, stale work, and agent capacity without
+                checking each list manually.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-sm text-zinc-400">
+              <span>Last refreshed: {formatTimestamp(lastRefreshed)}</span>
+              <span>Uptime: {formatUptime(stats.uptimeSeconds)}</span>
+              <button
+                onClick={() => void refreshDashboard()}
+                className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:border-indigo-500 hover:text-indigo-300"
+              >
+                {isRefreshing ? "Refreshing..." : "Refresh now"}
+              </button>
+            </div>
+          </div>
+
+          {staleTaskCount > 0 ? (
+            <div className="mt-4 rounded-lg border border-amber-700 bg-amber-950/40 px-4 py-3 text-sm text-amber-200">
+              {stats.tasks.stale.pendingOlderThan5m} pending task(s) older than 5 minutes and{" "}
+              {stats.tasks.stale.runningOlderThan15m} running task(s) older than 15 minutes
+              need review.
+            </div>
+          ) : null}
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-4">
+              <p className="text-sm text-zinc-400">Total tasks</p>
+              <p className="mt-2 text-2xl font-semibold text-zinc-100">{stats.tasks.total}</p>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-4">
+              <p className="text-sm text-zinc-400">Running tasks</p>
+              <p className="mt-2 text-2xl font-semibold text-blue-300">
+                {stats.tasks.byStatus.running}
+              </p>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-4">
+              <p className="text-sm text-zinc-400">Pending tasks</p>
+              <p className="mt-2 text-2xl font-semibold text-amber-300">
+                {stats.tasks.byStatus.pending}
+              </p>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-4">
+              <p className="text-sm text-zinc-400">Completed / Failed</p>
+              <p className="mt-2 text-2xl font-semibold text-zinc-100">
+                {stats.tasks.byStatus.completed} / {stats.tasks.byStatus.failed}
+              </p>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-4">
+              <p className="text-sm text-zinc-400">Agents idle / busy</p>
+              <p className="mt-2 text-2xl font-semibold text-zinc-100">
+                {stats.agents.byStatus.idle} / {stats.agents.byStatus.busy}
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* Agents Section */}
         <section>
           <h2 className="mb-4 text-lg font-semibold text-zinc-200">Agents</h2>
@@ -180,13 +342,12 @@ export default function Dashboard() {
                   <div className="mt-3 flex items-center gap-2 text-xs text-zinc-400">
                     <span className="rounded bg-zinc-800 px-2 py-0.5">{agent.model}</span>
                     <span
-                      className={`rounded px-2 py-0.5 ${
-                        agent.status === "idle"
-                          ? "bg-zinc-800"
-                          : "bg-emerald-900 text-emerald-300"
-                      }`}
+                      className={`rounded px-2 py-0.5 ${getAgentStatusClassName(agent.status)}`}
                     >
                       {agent.status}
+                    </span>
+                    <span className="rounded bg-zinc-800 px-2 py-0.5">
+                      {tasks.filter((task) => task.agentId === agent.id).length} assigned
                     </span>
                   </div>
                 </div>
@@ -219,23 +380,21 @@ export default function Dashboard() {
               {tasks.map((task) => (
                 <div
                   key={task.id}
-                  className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3"
+                  className="flex flex-col gap-3 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 lg:flex-row lg:items-center lg:justify-between"
                 >
                   <div>
                     <span className="font-medium text-zinc-200">{task.title}</span>
-                    <span className="ml-2 text-xs text-zinc-500">
-                      {new Date(task.createdAt).toLocaleString()}
-                    </span>
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
+                      <span>
+                        Assigned:{" "}
+                        {task.agentId ? agentNames.get(task.agentId) || "Unknown agent" : "Unassigned"}
+                      </span>
+                      <span>Created: {formatTimestamp(task.createdAt)}</span>
+                      <span>Updated: {formatTimestamp(task.updatedAt)}</span>
+                      {task.result ? <span>Result: {task.result}</span> : null}
+                    </div>
                   </div>
-                  <span
-                    className={`rounded px-2 py-0.5 text-xs ${
-                      task.status === "completed"
-                        ? "bg-emerald-900 text-emerald-300"
-                        : task.status === "running"
-                        ? "bg-blue-900 text-blue-300"
-                        : "bg-zinc-800 text-zinc-400"
-                    }`}
-                  >
+                  <span className={`rounded px-2 py-0.5 text-xs ${getTaskStatusClassName(task.status)}`}>
                     {task.status}
                   </span>
                 </div>
