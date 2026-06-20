@@ -167,13 +167,17 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    void refreshDashboard();
-
-    const intervalId = window.setInterval(() => {
+    const runRefresh = () => {
       void refreshDashboard();
-    }, 10000);
+    };
 
-    return () => window.clearInterval(intervalId);
+    const timeoutId = window.setTimeout(runRefresh, 0);
+    const intervalId = window.setInterval(runRefresh, 10000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
+    };
   }, [refreshDashboard]);
 
   const createAgent = async () => {
