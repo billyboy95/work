@@ -1,6 +1,7 @@
 const { Router } = require("express");
 const { agents } = require("../stores/agentsStore");
 const { tasks } = require("../stores/tasksStore");
+const { syncAgentStatuses } = require("../utils/syncAgentStatuses");
 
 const router = Router();
 
@@ -28,6 +29,7 @@ function isOlderThan(isoTimestamp, thresholdMs) {
 }
 
 router.get("/", (_req, res) => {
+  syncAgentStatuses(agents, tasks);
   const taskList = Array.from(tasks.values());
   const agentList = Array.from(agents.values());
 

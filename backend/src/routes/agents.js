@@ -2,14 +2,17 @@ const { Router } = require("express");
 const { v4: uuidv4 } = require("uuid");
 const { agents } = require("../stores/agentsStore");
 const { tasks } = require("../stores/tasksStore");
+const { syncAgentStatuses } = require("../utils/syncAgentStatuses");
 
 const router = Router();
 
 router.get("/", (_req, res) => {
+  syncAgentStatuses(agents, tasks);
   res.json({ agents: Array.from(agents.values()) });
 });
 
 router.get("/:id", (req, res) => {
+  syncAgentStatuses(agents, tasks);
   const agent = agents.get(req.params.id);
   if (!agent) return res.status(404).json({ error: "Agent not found" });
   res.json(agent);

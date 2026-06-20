@@ -64,4 +64,27 @@ describe("Tasks API", () => {
 
     expect(res.status).toBe(400);
   });
+
+  it("PUT /api/tasks/:id/status syncs assigned agent workload status", async () => {
+    const agentRes = await request(app)
+      .post("/api/agents")
+      .send({ name: "Ops Agent", description: "Handles work", model: "gpt-4" });
+    const taskRes = await request(app)
+      .post("/api/tasks")
+      .send({ title: "Assigned Task", agentId: agentRes.body.id });
+
+    const runningRes = await request(app)
+      .put(`/api/tasks/${taskRes.body.id}/status`)
+      .send({ status: "running" });
+    const busyAgentRes = await request(app).get(`/api/agents/${agentRes.body.id}`);
+    const completedRes = await request(app)
+      .put(`/api/tasks/${taskRes.body.id}/status`)
+      .send({ status: "completed", result: "Done" });
+    const idleAgentRes = await request(app).get(`/api/agents/${agentRes.body.id}`);
+
+    expect(runningRes.status).toBe(200);
+    expect(busyAgentRes.body.status).toBe("busy");
+    expect(completedRes.status).toBe(200);
+    expect(idleAgentRes.body.status).toBe("idle");
+  });
 });

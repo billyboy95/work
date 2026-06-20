@@ -2,6 +2,7 @@ const { Router } = require("express");
 const { v4: uuidv4 } = require("uuid");
 const { agents } = require("../stores/agentsStore");
 const { tasks } = require("../stores/tasksStore");
+const { syncAgentStatuses } = require("../utils/syncAgentStatuses");
 
 const router = Router();
 
@@ -42,6 +43,7 @@ router.post("/", (req, res) => {
   };
 
   tasks.set(task.id, task);
+  syncAgentStatuses(agents, tasks);
   res.status(201).json(task);
 });
 
@@ -87,6 +89,7 @@ router.put("/:id/status", (req, res) => {
   task.updatedAt = now;
 
   tasks.set(task.id, task);
+  syncAgentStatuses(agents, tasks);
   res.json(task);
 });
 
