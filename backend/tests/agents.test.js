@@ -1,7 +1,14 @@
 const request = require("supertest");
 const app = require("../src/app");
+const { clearAgents } = require("../src/stores/agentsStore");
+const { clearTasks } = require("../src/stores/tasksStore");
 
 describe("Agents API", () => {
+  beforeEach(() => {
+    clearAgents();
+    clearTasks();
+  });
+
   let agentId;
 
   it("GET /api/agents returns empty list", async () => {
@@ -47,5 +54,21 @@ describe("Agents API", () => {
   it("POST /api/agents without name returns 400", async () => {
     const res = await request(app).post("/api/agents").send({});
     expect(res.status).toBe(400);
+  });
+
+  it("DELETE /api/agents/:id unassigns linked tasks", async () => {
+    const agent = await request(app)
+      .post("/api/agents")
+      .send({ name: "Assigned Agent" });
+
+    const task = await request(app)
+      .post("/api/tasks")
+      .send({ title: "Assigned Task", agentId: agent.body.id });
+
+    const deleted = await request(app).delete(`/api/agents/${agent.body.id}`);
+    const fetchedTask = await request(app).get(`/api/tasks/${task.body.id}`);
+
+    expect(deleted.status).toBe(204);
+    expect(fetchedTask.body.agentId).toBeNull();
   });
 });
